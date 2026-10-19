@@ -52,8 +52,8 @@ export default function Providers({ children }: { children: ReactNode }) {
     let active = true;
     const loadProfile = async () => {
       const response = await fetch('/api/profile', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`Could not load your saved application (server returned ${response.status}).`);
       const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `Could not load your saved application (server returned ${response.status}).`);
       if (active && result.profile) {
         setMine({ ...blank(), ...result.profile, portfolio: result.profile.portfolio || [] });
         setLegacyMine(null);

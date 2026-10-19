@@ -7,6 +7,21 @@ export const dynamic = 'force-dynamic';
 
 type StoredProfile = { application: Draft; status: 'pending' | 'live'; submitted_at: string };
 
+function profileFailure(action: string, error: unknown) {
+  const message = error instanceof Error ? error.message : 'Unknown profile API error';
+  const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+  // Log only server error metadata; never log tokens, cookies, submitted profile data, or request bodies.
+  console.error(`[profile-api] ${action} failed`, { code, message });
+
+  if (message.includes('Supabase is not configured')) {
+    return NextResponse.json({ error: 'Supabase server configuration is missing. Add SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in Vercel, then redeploy.' }, { status: 503 });
+  }
+  if (code === 'PGRST205' || code === '42P01' || message.includes('model_profiles')) {
+    return NextResponse.json({ error: 'The Supabase profile schema is not installed or unavailable. Run supabase/schema.sql in the linked Supabase project, then retry.' }, { status: 503 });
+  }
+  return NextResponse.json({ error: 'Could not load your profile. Check the Vercel Function Logs for the profile-api diagnostic.' }, { status: 500 });
+}
+
 function isDraft(value: unknown): value is Draft {
   if (!value || typeof value !== 'object') return false;
   const draft = value as Partial<Draft>;
@@ -85,8 +100,8 @@ export async function GET() {
     const row = data as StoredProfile;
     const application = await signMedia(auth.supabase, auth.user.id, row.application);
     return NextResponse.json({ profile: { ...application, status: row.status, submitted: Date.parse(row.submitted_at) } });
-  } catch {
-    return NextResponse.json({ error: 'Could not load your profile.' }, { status: 500 });
+  } catch (error) {
+    return profileFailure('GET', error);
   }
 }
 
@@ -128,8 +143,8 @@ export async function PUT(request: Request) {
     const replaced = current ? applicationMedia(current.application as Draft).filter((path) => !media.includes(path)) : [];
     if (replaced.length) await auth.supabase.storage.from('application-photos').remove(replaced);
     return NextResponse.json({ ok: true, status: saved.status, submitted: Date.parse(saved.submitted_at) }, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: 'Could not save your application. Please check the database setup and try again.' }, { status: 500 });
+  } catch (error) {
+    return profileFailure('PUT', error);
   }
 }
 
@@ -145,7 +160,7 @@ export async function DELETE() {
     const media = current ? applicationMedia(current.application as Draft) : [];
     if (media.length) await auth.supabase.storage.from('application-photos').remove(media);
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: 'Could not delete your application.' }, { status: 500 });
+  } catch (error) {
+    return profileFailure('DELETE', error);
   }
 }
