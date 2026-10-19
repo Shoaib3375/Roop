@@ -9,9 +9,10 @@ import PhotoTheme from '@/components/PhotoTheme';
 import { ageOf, pub } from '@/lib/utils';
 
 export default function MinePage() {
-  const { ready, user, mine: p, hasSavedDraft, remove, startEdit } = useProfile();
+  const { ready, user, mine: p, legacyMine, notice, migrateLegacy, hasSavedDraft, remove, startEdit } = useProfile();
   const router = useRouter();
   const [confirmDel, setConfirmDel] = useState(false);
+  const [migrating, setMigrating] = useState(false);
 
   if (!ready) return null;
 
@@ -30,14 +31,32 @@ export default function MinePage() {
     return (
       <section className="wrap page">
         <p className="mono muted">My profile</p>
-        <h1 className="page__title">No profile <em>yet</em></h1>
-        <p style={{ margin: '20px 0', maxWidth: '52ch', fontSize: '1.1rem' }} className="muted">
-          Create your profile to be reviewed by our booking team. Only approved models appear on the roster.
-        </p>
-        <div className="actions">
-          <Link className="btn btn--solid" href="/join">Create your profile</Link>
-          {hasSavedDraft && <span className="muted" style={{ alignSelf: 'center', fontSize: 14 }}>You have an unsubmitted draft in this tab.</span>}
-        </div>
+        {notice && <p className="note note--warn" role="status" style={{ marginBottom: 20 }}>{notice}</p>}
+        {legacyMine ? (
+          <>
+            <h1 className="page__title">Profile found <em>on this device</em></h1>
+            <p style={{ margin: '20px 0', maxWidth: '58ch', fontSize: '1.1rem' }} className="muted">
+              We found a profile saved by the previous version of this site. It has not been transferred to your account yet. Import it now to save it privately; it will return to the booking team for review.
+            </p>
+            <div className="actions">
+              <button className="btn btn--solid" disabled={migrating} onClick={async () => { setMigrating(true); await migrateLegacy(); setMigrating(false); }}>
+                {migrating ? 'Importing profile…' : 'Import saved profile'}
+              </button>
+              <Link className="btn" href="/join">Start a new profile</Link>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 className="page__title">No profile <em>yet</em></h1>
+            <p style={{ margin: '20px 0', maxWidth: '58ch', fontSize: '1.1rem' }} className="muted">
+              We couldn’t find a submitted profile for this account. Profiles submitted before account storage was enabled may still be saved only in the original browser. Sign in there and check for an import option, or create a profile here.
+            </p>
+            <div className="actions">
+              <Link className="btn btn--solid" href="/join">Create your profile</Link>
+              {hasSavedDraft && <span className="muted" style={{ alignSelf: 'center', fontSize: 14 }}>You have an unsubmitted draft in this tab.</span>}
+            </div>
+          </>
+        )}
       </section>
     );
   }

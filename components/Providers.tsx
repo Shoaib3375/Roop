@@ -12,12 +12,14 @@ interface Ctx {
   user: User | null;
   authConfigured: boolean;
   mine: Draft | null;
+  legacyMine: Draft | null;
   draft: Draft;
   hasSavedDraft: boolean;
   notice: string;
   roster: Model[];
   updateDraft: (fn: (d: Draft) => Draft) => void;
   submit: (application: Draft) => Promise<boolean>;
+  migrateLegacy: () => Promise<boolean>;
   signOut: () => Promise<void>;
   remove: () => Promise<void>;
   startEdit: () => void;
@@ -36,6 +38,7 @@ export default function Providers({ children }: { children: ReactNode }) {
   const supabase = getSupabaseBrowser();
   const [user, setUser] = useState<User | null>(null);
   const [mine, setMine] = useState<Draft | null>(null);
+  const [legacyMine, setLegacyMine] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft>(blank());
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
   const [notice, setNotice] = useState('');
@@ -49,9 +52,24 @@ export default function Providers({ children }: { children: ReactNode }) {
     let active = true;
     const loadProfile = async () => {
       const response = await fetch('/api/profile', { cache: 'no-store' });
-      if (!response.ok) throw new Error('Could not load your saved application.');
+      if (!response.ok) throw new Error(`Could not load your saved application (server returned ${response.status}).`);
       const result = await response.json();
-      if (active && result.profile) setMine({ ...blank(), ...result.profile, portfolio: result.profile.portfolio || [] });
+      if (active && result.profile) {
+        setMine({ ...blank(), ...result.profile, portfolio: result.profile.portfolio || [] });
+        setLegacyMine(null);
+        setNotice('');
+      } else if (active) {
+        setMine(null);
+        try {
+          const saved = localStorage.getItem('roop.mine');
+          const localProfile = saved ? JSON.parse(saved) as Draft : null;
+          setLegacyMine(localProfile && typeof localProfile.name === 'string' && localProfile.photos
+            ? { ...blank(), ...localProfile, portfolio: localProfile.portfolio || [] }
+            : null);
+        } catch {
+          setLegacyMine(null);
+        }
+      }
     };
     supabase.auth.getUser().then(async ({ data }) => {
       if (!active) return;
@@ -66,6 +84,7 @@ export default function Providers({ children }: { children: ReactNode }) {
       setUser(session?.user || null);
       if (event === 'SIGNED_OUT') {
         setMine(null);
+        setLegacyMine(null);
         setDraft(blank());
         setHasSavedDraft(false);
         setReady(true);
@@ -129,6 +148,17 @@ export default function Providers({ children }: { children: ReactNode }) {
     }
   }, [user, supabase]);
 
+  const migrateLegacy = useCallback(async (): Promise<boolean> => {
+    if (!legacyMine) return false;
+    const ok = await submit(legacyMine);
+    if (ok) {
+      try { localStorage.removeItem('roop.mine'); } catch { /* Ignore storage cleanup failure. */ }
+      setLegacyMine(null);
+      setNotice('Your previous profile was imported and resubmitted for review.');
+    }
+    return ok;
+  }, [legacyMine, submit]);
+
   const signOut = useCallback(async () => {
     if (supabase) await supabase.auth.signOut();
   }, [supabase]);
@@ -151,7 +181,7 @@ export default function Providers({ children }: { children: ReactNode }) {
   const roster: Model[] = mine && mine.status === 'live' ? [pub(mine), ...SAMPLE] : SAMPLE;
 
   return (
-    <ProfileCtx.Provider value={{ ready, user, authConfigured: Boolean(supabase), mine, draft, hasSavedDraft, notice, roster, updateDraft, submit, signOut, remove, startEdit }}>
+    <ProfileCtx.Provider value={{ ready, user, authConfigured: Boolean(supabase), mine, legacyMine, draft, hasSavedDraft, notice, roster, updateDraft, submit, migrateLegacy, signOut, remove, startEdit }}>
       {children}
     </ProfileCtx.Provider>
   );
