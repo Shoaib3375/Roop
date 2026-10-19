@@ -9,10 +9,11 @@ import PhotoTheme from '@/components/PhotoTheme';
 import { ageOf, pub } from '@/lib/utils';
 
 export default function MinePage() {
-  const { ready, user, mine: p, legacyMine, notice, migrateLegacy, hasSavedDraft, remove, startEdit } = useProfile();
+  const { ready, user, mine: p, legacyMine, notice, profileError, reloadProfile, migrateLegacy, hasSavedDraft, remove, startEdit } = useProfile();
   const router = useRouter();
   const [confirmDel, setConfirmDel] = useState(false);
   const [migrating, setMigrating] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   if (!ready) return null;
 
@@ -23,6 +24,24 @@ export default function MinePage() {
         <h1 className="page__title">Sign in to <em>continue</em></h1>
         <p className="muted" style={{ margin: '20px 0', maxWidth: '52ch', fontSize: '1.1rem' }}>Your model application is private to your account. Sign in to view or manage it.</p>
         <div className="actions"><Link className="btn btn--solid" href="/login?next=/mine">Sign in</Link><Link className="btn" href="/signup?next=/mine">Create account</Link></div>
+      </section>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <section className="wrap page">
+        <p className="mono muted">My profile</p>
+        <h1 className="page__title">Couldn’t load <em>your profile</em></h1>
+        <p className="note note--warn" role="alert" style={{ marginTop: 20, maxWidth: '70ch' }}>{profileError}</p>
+        <p className="muted" style={{ marginTop: 14, maxWidth: '65ch' }}>
+          Your profile has not been deleted. This page will not show an empty-profile message until the server confirms there is no saved application.
+        </p>
+        <button className="btn btn--solid" style={{ marginTop: 18 }} disabled={retrying} onClick={async () => {
+          setRetrying(true);
+          try { await reloadProfile(); } catch { /* The provider records the next request's error on reload. */ }
+          setRetrying(false);
+        }}>{retrying ? 'Retrying…' : 'Retry loading profile'}</button>
       </section>
     );
   }
