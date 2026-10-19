@@ -39,7 +39,7 @@ export default function Footer() {
         </div>
         <p className="fine">
           Demo platform. All agency details and the twelve model profiles shown are fictional sample content.
-          Profiles you create are saved in this browser only.
+          Submitted applications are stored privately with your account.
         </p>
       </div>
     </footer>

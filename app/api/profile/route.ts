@@ -120,7 +120,7 @@ export async function PUT(request: Request) {
     const { data: saved, error } = await auth.supabase.from('model_profiles').upsert({
       user_id: auth.user.id,
       application,
-      status: current?.status || 'pending',
+      status: 'pending',
       submitted_at: now,
       updated_at: now,
     }, { onConflict: 'user_id' }).select('status,submitted_at').single();
