@@ -82,6 +82,7 @@ export default function MinePage() {
 
   const m = pub(p);
   const live = p.status === 'live';
+  const rejected = p.status === 'rejected';
   const st = live ? 3 : 2;
   const age = ageOf(p.dob);
 
@@ -98,7 +99,9 @@ export default function MinePage() {
       <p className={'note' + (live ? '' : ' note--warn')} style={{ marginTop: 14 }}>
         {live
           ? 'Your profile is live and appears on the roster.'
-          : 'Your profile is in review. It does not appear on the public roster until the booking team approves it.'}
+          : rejected
+            ? 'The booking team has requested changes or declined this application. You can edit and resubmit it for review.'
+            : 'Your profile is in review. It does not appear on the public roster until the booking team approves it.'}
       </p>
 
       <div className="actions">
@@ -117,7 +120,7 @@ export default function MinePage() {
           <button className="btn" onClick={() => setConfirmDel(true)}>Delete profile</button>
         )}
       </div>
-      {!live && <p className="hint" style={{ margin: '-6px 0 18px' }}>Your application is private and is not shown in the public roster while pending.</p>}
+      {!live && <p className="hint" style={{ margin: '-6px 0 18px' }}>Your application is private and is not shown in the public roster until approved.</p>}
 
       <h3 className="h3">Private details, visible only to you and the booking team</h3>
       <div className="priv">

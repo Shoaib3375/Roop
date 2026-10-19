@@ -29,6 +29,7 @@ export default function Header() {
           <Link href="/roster" aria-current={onRoster ? 'page' : undefined}>Roster</Link>
           <Link href="/#about">About</Link>
           {user && <Link href="/mine" aria-current={onMine ? 'page' : undefined}>My profile</Link>}
+          {user?.app_metadata?.role === 'admin' && <Link href="/admin" aria-current={path.startsWith('/admin') ? 'page' : undefined}>Review applications</Link>}
         </nav>
         <div className="hd__r">
           <button className="icon-btn" onClick={toggleTheme} aria-label="Switch light or dark theme" title="Switch theme">◐</button>

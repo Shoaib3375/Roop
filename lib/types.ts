@@ -57,6 +57,6 @@ export interface Draft {
   ok1: boolean;
   ok2: boolean;
   okG: boolean;
-  status?: 'pending' | 'live';
+  status?: 'pending' | 'live' | 'rejected';
   submitted?: number;
 }

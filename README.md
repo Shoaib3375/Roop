@@ -23,6 +23,7 @@ npm run build && npm start
 | `/signup`      | Create an account with email confirmation       |
 | `/login`       | Sign in to manage your application              |
 | `/forgot-password` | Request a password reset                    |
+| `/admin`       | Staff-only application review and approval     |
 
 ## Notes
 
@@ -30,7 +31,7 @@ npm run build && npm start
 - Registration and login use Supabase Auth (email/password and email confirmation).
 - Submitted applications are stored in the Supabase `model_profiles` table under row-level security. Profile photos are held in a private Supabase Storage bucket and are only signed for the authenticated owner.
 - In-progress edits stay in memory in the current tab until submitted; they are not saved to browser storage.
-- Review status cannot be changed by an applicant. The booking team must approve an application through a trusted admin workflow.
+- Review status cannot be changed by an applicant. Authorized admins use `/admin` to approve or reject applications; approving makes only the explicitly public profile fields visible on the roster.
 - Booking enquiries are sent by `POST /api/enquiries` to the server-side webhook configured as `ROOP_ENQUIRY_WEBHOOK`. Set this environment variable in your deployment settings; never expose it with a `NEXT_PUBLIC_` prefix.
 - Without `ROOP_ENQUIRY_WEBHOOK`, the API responds with a setup error and does not persist submissions. Connect the webhook to a trusted service that handles enquiries (for example, an email workflow or queue).
 
@@ -43,9 +44,9 @@ Test the function locally with `npm run dev`, then submit an enquiry from any mo
 ## Account and registration setup
 
 1. Create a Supabase project and copy `.env.example` to `.env.local`. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the project API settings. A publishable/anon key is intended for browser use; never put a secret/service-role key, database password, or JWT secret in a `NEXT_PUBLIC_` variable.
-2. Run `supabase/schema.sql` in the Supabase SQL editor. It creates the application table, row-level security policies, a status-protection trigger, and a private photo bucket with per-user storage rules.
+2. Run `supabase/schema.sql` for a fresh project, or apply the versioned files in `supabase/migrations/` to an existing CLI-linked project. They create the application table, row-level security policies, admin role checks, a public-safe approved-profile view, status protection, and private photo storage.
 3. In Supabase Authentication settings, enable email/password, configure the site's URL (for local use `http://localhost:3000`), and allow the callback URL `http://localhost:3000/auth/callback`. Add the production callback URL when deploying.
 4. Start the app. Register at `/signup`, confirm the email, sign in at `/login`, then complete the application at `/join`. Password reset starts at `/forgot-password`.
 
-Submitted profile records and media are private to the account. This starter does not include an admin dashboard or automatic public-roster publication for approved Supabase applications yet; do not mark profiles live until a trusted approval and publication workflow is configured. Demo/sample profiles remain in `lib/data.ts`.
+Submitted profile records and pending/rejected media are private to the applicant and admins. To grant staff access, open Supabase Dashboard → Authentication → Users → select the staff account → edit **App Metadata** to include `{"role":"admin"}` (never use User Metadata), save, then have that staff member sign out and back in to refresh the claim. The staff-only `/admin` dashboard can approve or reject; approval publishes safe fields through `public_model_profiles` and allows the approved photos to be signed for public display. Demo/sample profiles remain in `lib/data.ts`.
 # Roop

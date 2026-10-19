@@ -2,7 +2,7 @@
 create table if not exists public.model_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   application jsonb not null,
-  status text not null default 'pending' check (status in ('pending', 'live')),
+  status text not null default 'pending' check (status in ('pending', 'live', 'rejected')),
   submitted_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -13,14 +13,22 @@ grant select, insert, update, delete on public.model_profiles to authenticated;
 
 drop policy if exists "models read own profile" on public.model_profiles;
 create policy "models read own profile" on public.model_profiles
-  for select to authenticated using ((select auth.uid()) = user_id);
+  for select to authenticated using (
+    (select auth.uid()) = user_id
+    or (select auth.jwt()->'app_metadata'->>'role') = 'admin'
+  );
 drop policy if exists "models create own profile" on public.model_profiles;
 create policy "models create own profile" on public.model_profiles
   for insert to authenticated with check ((select auth.uid()) = user_id and status = 'pending');
 drop policy if exists "models edit own profile" on public.model_profiles;
 create policy "models edit own profile" on public.model_profiles
-  for update to authenticated using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+  for update to authenticated using (
+    (select auth.uid()) = user_id
+    or (select auth.jwt()->'app_metadata'->>'role') = 'admin'
+  ) with check (
+    (select auth.uid()) = user_id
+    or (select auth.jwt()->'app_metadata'->>'role') = 'admin'
+  );
 drop policy if exists "models delete own profile" on public.model_profiles;
 create policy "models delete own profile" on public.model_profiles
   for delete to authenticated using ((select auth.uid()) = user_id);
@@ -28,9 +36,8 @@ create policy "models delete own profile" on public.model_profiles
 create or replace function public.protect_model_profile_status()
 returns trigger language plpgsql as $$
 begin
-  if auth.uid() is not null then
-    -- Any authenticated user update is an application resubmission; force it
-    -- back to review regardless of any client-supplied status value.
+  if coalesce(auth.jwt()->'app_metadata'->>'role', '') <> 'admin' then
+    -- Applicants cannot approve themselves; their edits return to review.
     new.status := 'pending';
     new.submitted_at := now();
   end if;
@@ -67,4 +74,68 @@ drop policy if exists "models delete own application photos" on storage.objects;
 create policy "models delete own application photos" on storage.objects
   for delete to authenticated using (
     bucket_id = 'application-photos' and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+create or replace view public.public_model_profiles with (security_barrier = true) as
+select
+  user_id as profile_id,
+  jsonb_build_object(
+    'name', coalesce(nullif(application->>'stage', ''), 'New face'),
+    'board', application->>'board',
+    'city', application->>'city',
+    'age', case
+      when application->>'dob' ~ '^\d{4}-\d{2}-\d{2}$' then
+        date_part('year', age(current_date, (application->>'dob')::date))::integer
+      else null
+    end,
+    'h', coalesce(nullif(application->>'h', '')::numeric, 0),
+    'bust', coalesce(nullif(application->>'bust', '')::numeric, 0),
+    'waist', coalesce(nullif(application->>'waist', '')::numeric, 0),
+    'hips', coalesce(nullif(application->>'hips', '')::numeric, 0),
+    'shoe', coalesce(nullif(application->>'shoe', '')::numeric, 0),
+    'hair', application->>'hair', 'eyes', application->>'eyes',
+    'langs', coalesce(application->'langs', '[]'::jsonb),
+    'ig', regexp_replace(coalesce(application->>'ig', ''), '^@', ''),
+    'bio', coalesce(application->>'bio', ''),
+    'exp', coalesce(application->'exp', '[]'::jsonb),
+    'photos', coalesce(application->'photos', '{}'::jsonb),
+    'portfolio', coalesce(application->'portfolio', '[]'::jsonb),
+    'isNew', jsonb_array_length(coalesce(application->'exp', '[]'::jsonb)) = 0
+  ) as model
+from public.model_profiles
+where status = 'live';
+
+revoke all on public.public_model_profiles from public;
+grant select on public.public_model_profiles to anon, authenticated;
+
+create or replace function public.is_live_model_photo(object_name text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.model_profiles p
+    where p.status = 'live'
+      and (
+        exists (
+          select 1 from jsonb_each(coalesce(p.application->'photos', '{}'::jsonb)) photo
+          where photo.value #>> '{}' = object_name
+        )
+        or exists (
+          select 1 from jsonb_array_elements_text(coalesce(p.application->'portfolio', '[]'::jsonb)) portfolio(path)
+          where portfolio.path = object_name
+        )
+      )
+  );
+$$;
+revoke all on function public.is_live_model_photo(text) from public;
+grant execute on function public.is_live_model_photo(text) to anon, authenticated;
+
+drop policy if exists "public may read approved model photos" on storage.objects;
+create policy "public may read approved model photos" on storage.objects
+  for select to anon, authenticated using (
+    bucket_id = 'application-photos' and public.is_live_model_photo(name)
+  );
+drop policy if exists "admins may review application photos" on storage.objects;
+create policy "admins may review application photos" on storage.objects
+  for select to authenticated using (
+    bucket_id = 'application-photos'
+    and (select auth.jwt()->'app_metadata'->>'role') = 'admin'
   );

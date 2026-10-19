@@ -45,6 +45,19 @@ export default function Providers({ children }: { children: ReactNode }) {
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
   const [notice, setNotice] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [approvedRoster, setApprovedRoster] = useState<Model[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/roster', { cache: 'no-store' })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error('Public roster request failed');
+        if (active) setApprovedRoster(result.models || []);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const loadProfile = useCallback(async () => {
     const response = await fetch('/api/profile', { cache: 'no-store' });
@@ -194,7 +207,11 @@ export default function Providers({ children }: { children: ReactNode }) {
     setDraft(copy);
   }, [mine]);
 
-  const roster: Model[] = mine && mine.status === 'live' ? [pub(mine), ...SAMPLE] : SAMPLE;
+  const roster: Model[] = [
+    ...(mine?.status === 'live' ? [pub(mine)] : []),
+    ...approvedRoster.filter((model) => model.id !== user?.id),
+    ...SAMPLE,
+  ];
 
   return (
     <ProfileCtx.Provider value={{ ready, user, authConfigured: Boolean(supabase), mine, legacyMine, draft, hasSavedDraft, notice, profileError, roster, updateDraft, submit, migrateLegacy, signOut, remove, reloadProfile, startEdit }}>
